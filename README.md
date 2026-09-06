@@ -30,6 +30,17 @@ Two features need configuration before they do anything: the **team digest**
 needs `TEAM_ROSTER`, and anything Jira needs a token. The rest works with a
 mailbox and an Anthropic key.
 
+### Why I built it
+
+Hi, I'm John. I built this app with Claude to help me solve a couple problems.
+
+1. Have a daily agenda sent to daily, and at night the day before
+2. Missed events in my inbox and junk folders
+3. Forgetting to follow-up with times to meet in plain language + a booking link
+4. Get updated on what my team accomplished the week prior, and what they have to do
+5. Complete tasks in Jira right from my inbox
+6. Get more users into my contacts so auto-fill worked better
+
 ### Design rules it holds to
 
 - **Silence is the default.** No mail is sent unless something needs you.
@@ -47,14 +58,125 @@ mailbox and an Anthropic key.
 
 ---
 
-## Requirements
+## Before you start: the ingredients
 
-- An Azure subscription, and a Microsoft 365 mailbox you control
-- Python 3.11
-- [Azure Functions Core Tools v4](https://learn.microsoft.com/azure/azure-functions/functions-run-local)
-  and the Azure CLI
-- An [Anthropic API key](https://console.anthropic.com/)
-- Optional: a Jira Cloud site and API token
+Nothing here ships with credentials. You supply all of it, and it is worth
+gathering these before you touch the setup steps — half of them need somebody
+else to approve something.
+
+### Accounts and subscriptions
+
+| | What for | Cost |
+|---|---|---|
+| **Microsoft 365 mailbox** | The mailbox it works in. Any Business or Enterprise plan with Exchange Online | You almost certainly have one |
+| **Azure subscription** | Where the app runs. The same tenant as the mailbox is simplest | A few dollars a month on Flex Consumption |
+| **Anthropic API account** | The models that classify and draft | Pay as you go; see the note below |
+| **Jira Cloud site** *(optional)* | Task and team digests. Skip it and those features simply do not run | Free tier is enough |
+
+### API keys and secrets
+
+Four secrets, and every one of them belongs in Key Vault rather than in an app
+setting or a file.
+
+| Secret | Where it comes from |
+|---|---|
+| `anthropic-api-key` | [console.anthropic.com](https://console.anthropic.com/) → API Keys |
+| `graph-client-secret` | Your Entra app registration → Certificates & secrets |
+| `action-signing-key` | You generate it: `python -c "import secrets; print(secrets.token_urlsafe(48))"` |
+| `jira-api-token` *(optional)* | [id.atlassian.com](https://id.atlassian.com/manage-profile/security/api-tokens) → API tokens |
+
+The refresh token that gives the app access to the mailbox is a fifth secret,
+but you never handle it — `scripts/get_refresh_token.py` writes it straight into
+Key Vault and never prints it.
+
+**On model cost.** Triage runs hourly on weekdays and uses Haiku for
+classification, which is the only call that happens constantly. Drafting,
+planning, event extraction and junk review use Sonnet, and they run a handful of
+times a day. For one mailbox this lands in single-digit dollars a month; the
+junk sweep is the most expensive single job because it reads a whole folder.
+
+### Roles and permissions
+
+This is the part that usually needs someone else, so start here.
+
+**On the Microsoft 365 tenant**
+
+- **Whoever signs in to `get_refresh_token.py` must be the mailbox owner.** The
+  assistant works with *delegated* permission — it acts as that person, and can
+  reach exactly what that person can reach. Signing in as an admin gives it the
+  admin's mailbox, which is not what you want.
+- **Granting admin consent needs a Global Administrator or Privileged Role
+  Administrator.** If that isn't you, this is the ask to send: an app
+  registration with delegated Microsoft Graph permissions, no application
+  permissions, scoped to one mailbox.
+
+  | Delegated scope | Why it is needed |
+  |---|---|
+  | `offline_access` | Refresh tokens, so it keeps working without re-consent |
+  | `Mail.ReadWrite` | Read the inbox, create drafts, move and delete messages |
+  | `Mail.Send` | Send a reply you approved |
+  | `Calendars.Read` | The agenda, and real availability for meeting replies |
+  | `Contacts.ReadWrite` | Add people you have replied to |
+  | `Calendars.ReadWrite` | *Only* for the block-time and add-to-calendar buttons |
+
+  There is no `Mail.Read` on other mailboxes, no application permission, and no
+  directory access. It cannot see anyone else's mail.
+
+**On Azure**
+
+- **Contributor** on the subscription or resource group, to create the storage
+  account, Function App and Key Vault.
+- **Key Vault Secrets Officer** on the vault, for yourself, to write the secrets.
+- **Key Vault Secrets User** on the vault, for the Function App's managed
+  identity, so it can read them. The setup steps assign this.
+- **User Access Administrator** or **Owner** if you need to make those role
+  assignments yourself.
+
+**On Jira** *(optional)*
+
+- An account that can see the projects in your roster, and transition issues.
+  The app reads and writes as that account, so it can only touch what that
+  account already could.
+
+### Tools on your machine
+
+| Tool | Why |
+|---|---|
+| **Python 3.11** | Matches the Functions runtime. Later versions may not deploy cleanly |
+| **Azure CLI** | Everything in the setup steps |
+| **Azure Functions Core Tools v4** | `func start` for local runs |
+| **Git** | To clone this |
+
+### Building on it with Claude Code
+
+This app was written with [Claude Code](https://claude.com/claude-code), and it
+is the easiest way to extend it — the codebase is heavily commented with the
+*reasoning* behind each decision, which is exactly what an agent needs to change
+something without breaking the thinking behind it.
+
+```bash
+npm install -g @anthropic-ai/claude-code
+cd clairevoyant
+claude
+```
+
+Claude Code needs a Claude account (Pro, Max, Team, or API billing). That is
+separate from the `ANTHROPIC_API_KEY` the app itself uses at runtime.
+
+Two optional connectors make the work noticeably easier, both configured from
+inside Claude Code with `/mcp`:
+
+- **Microsoft 365** — lets Claude read the mailbox and calendar directly while
+  you are working, so you can ask "what did that agenda actually look like this
+  morning?" instead of describing it.
+- **Atlassian** — the same for Jira: check a board, confirm a project key, look
+  at an issue's real fields before writing a query against them.
+
+Neither is required to run the app. They only shorten the loop while you build.
+
+**A warning worth heeding.** Deploying, sending mail and clearing folders are
+real actions against a real mailbox. Keep Claude Code's permission prompts on
+while you work on this, rather than approving everything up front.
 
 ---
 
