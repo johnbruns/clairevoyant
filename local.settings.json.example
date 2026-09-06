@@ -1,0 +1,30 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "FUNCTIONS_WORKER_RUNTIME": "python",
+    "AzureWebJobsStorage": "",
+
+    "ASSISTANT_EMAIL": "you@example.org",
+    "ASSISTANT_USER_NAME": "Alex",
+    "ASSISTANT_TIMEZONE": "America/New_York",
+
+    "GRAPH_TENANT_ID": "",
+    "GRAPH_CLIENT_ID": "",
+    "GRAPH_CLIENT_SECRET": "",
+    "GRAPH_CALENDAR_WRITE": "false",
+
+    "ANTHROPIC_API_KEY": "",
+    "ACTION_SIGNING_KEY": "",
+    "ACTION_BASE_URL": "http://localhost:7071/api",
+
+    "BOOKING_LINK": "",
+
+    "JIRA_BASE_URL": "",
+    "JIRA_EMAIL": "",
+    "JIRA_API_TOKEN": "",
+    "JIRA_PROJECT_KEY": "TASK",
+    "JIRA_ASSIGNEES": "{}",
+    "JIRA_DEFAULT_ASSIGNEE": "",
+    "TEAM_ROSTER": "[]"
+  }
+}

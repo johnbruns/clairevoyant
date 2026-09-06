@@ -1,0 +1,21 @@
+# Local state: every store falls back to JSON files here when there is no
+# Azure Storage connection string. These contain real mail metadata.
+.local/
+
+# Secrets. local.settings.json holds live keys; commit the .example instead.
+local.settings.json
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# Build output
+*.zip
+
+# OS
+.DS_Store
+Thumbs.db

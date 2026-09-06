@@ -1,0 +1,7 @@
+.git*
+.vscode
+.local
+tests/
+scripts/
+*.zip
+__pycache__
