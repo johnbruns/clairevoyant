@@ -11,6 +11,9 @@ actually needs a decision.
 Every action that changes anything is a button in an email. Nothing is sent,
 booked, moved or deleted without a click.
 
+📄 **[Read the handbook](docs/claire-voyant-handbook.pdf)** — twelve pages on
+what each feature does, when it runs, and what the emails actually look like.
+
 ---
 
 ## What it does
