@@ -12,7 +12,7 @@ from __future__ import annotations
 import datetime as dt
 import html
 
-from . import persona
+from . import notice, persona
 from .availability import long_date
 from .recap import STYLE
 
@@ -88,7 +88,8 @@ def build_event_digest(
 ) -> tuple[str, str]:
     """Return (subject, html). Candidates are expected sorted by start date."""
     links = links or {}
-    parts = [f"<style>{STYLE}{EXTRA_STYLE}{persona.STYLE}</style>", persona.greeting_html()]
+    parts = [f"<style>{STYLE}{EXTRA_STYLE}{persona.STYLE}{notice.STYLE}</style>",
+             persona.greeting_html()]
     parts.append("<h2>Events you may want to attend</h2>")
 
     if not candidates:
@@ -135,5 +136,6 @@ def build_event_digest(
             + "</div>"
         )
 
+    parts.append(notice.html())
     parts.append(persona.signoff_html())
     return f"Events you may want to attend ({len(candidates)})", "".join(parts)

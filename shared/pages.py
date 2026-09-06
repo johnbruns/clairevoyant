@@ -240,6 +240,14 @@ def confirm_junk(candidate, action: str, token: str) -> str:
         detail.append("<div class='label'>From</div>"
                       f"<div class='meta'>{_esc(candidate.sender_name)} "
                       f"&lt;{_esc(candidate.sender_address)}&gt;</div>")
+    # The domain on its own line, because a lookalike domain is the whole
+    # trick and it is unreadable buried inside a long display name.
+    if getattr(candidate, "sender_domain", ""):
+        detail.append("<div class='label'>Sending domain</div>"
+                      f"<div class='meta'><b>{_esc(candidate.sender_domain)}</b>"
+                      + (f" &middot; {_esc(candidate.auth_summary)}"
+                         if getattr(candidate, "auth_summary", "") else "")
+                      + "</div>")
     if candidate.why:
         detail.append("<div class='label'>Why I kept it back</div>"
                       f"<div class='quote'>{_esc(candidate.why)}</div>")

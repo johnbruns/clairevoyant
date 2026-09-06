@@ -18,7 +18,7 @@ import html
 import os
 from zoneinfo import ZoneInfo
 
-from . import persona
+from . import notice, persona
 from .availability import Slot, long_date, merge_contiguous
 from .planning import DayPlan
 from .triage import Verdict
@@ -249,7 +249,8 @@ def build_recap(
     drafted = [v for v in needs_reply if v.draft]
     undrafted = [v for v in needs_reply if not v.draft]
 
-    parts = [f"<style>{STYLE}{persona.STYLE}</style>", persona.greeting_html()]
+    parts = [f"<style>{STYLE}{persona.STYLE}{notice.STYLE}</style>",
+             persona.greeting_html()]
 
     parts.append(f"<h2>{_esc(GREETING)}</h2>")
     if not needs_reply:
@@ -321,6 +322,7 @@ def build_recap(
         parts.extend(f"<li>{_esc(c)}</li>" for c in added_contacts)
         parts.append("</ul>")
 
+    parts.append(notice.html())
     parts.append(
         f"<div class='foot'>{len(verdicts)} message(s) reviewed &middot; "
         f"{len(automated)} automated &middot; "

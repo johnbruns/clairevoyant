@@ -36,7 +36,7 @@ import html
 import re
 from zoneinfo import ZoneInfo
 
-from . import persona
+from . import notice, persona
 from .availability import long_date, merge_contiguous
 from .recap import STYLE
 
@@ -360,7 +360,7 @@ def build_agenda(
     tz = ZoneInfo(timezone)
     task_links = task_links or {}
     block_links = block_links or {}
-    parts = [f"<style>{STYLE}{EXTRA_STYLE}{persona.STYLE}</style>"]
+    parts = [f"<style>{STYLE}{EXTRA_STYLE}{persona.STYLE}{notice.STYLE}</style>"]
 
     when = "daily agenda" if is_today else "agenda for tomorrow"
     parts.append(persona.greeting_html())
@@ -407,6 +407,7 @@ def build_agenda(
 
     parts.extend(_dashboard(plan, for_date, task_links, board_url))
 
+    parts.append(notice.html())
     parts.append(persona.signoff_html())
 
     label = "Your Daily Agenda" if is_today else "Tomorrow's Agenda"

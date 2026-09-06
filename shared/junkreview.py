@@ -61,6 +61,8 @@ class JunkCandidate:
     event_end: str = ""
     event_location: str = ""
     event_online: bool = False
+    sender_domain: str = ""
+    auth_summary: str = ""
     status: str = PENDING
     seen: str = ""
     decided: str = ""

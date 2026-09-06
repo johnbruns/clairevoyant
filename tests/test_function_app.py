@@ -776,7 +776,17 @@ class Digests:
         return False
 
 
-def reply_message(marker, body="did the MOU one", sender=None):
+def reply_message(marker, body="did the MOU one", sender=None, internal=True):
+    """A reply to a task digest.
+
+    `internal` controls the header Exchange stamps on receipt. Genuine mail the
+    owner sends himself is `Internal`; a spoof of his address arriving from
+    outside is `Anonymous`, and that difference is the whole gate.
+    """
+    headers = []
+    if internal is not None:
+        headers = [{"name": "X-MS-Exchange-Organization-AuthAs",
+                    "value": "Internal" if internal else "Anonymous"}]
     return {
         "id": "r1",
         "from": {"emailAddress": {"name": "Alex Rivera",
@@ -784,7 +794,44 @@ def reply_message(marker, body="did the MOU one", sender=None):
         "subject": f"RE: Your tasks - 3 open {marker_tag(marker)}",
         "bodyPreview": body,
         "receivedDateTime": "2026-09-07T12:00:00Z",
+        "internetMessageHeaders": headers,
     }
+
+
+def test_a_spoofed_task_reply_is_refused():
+    """The From address is a claim; the origin header is not.
+
+    Anyone who was ever forwarded a task digest has a valid marker sitting in
+    its subject line. Without this gate, that plus a spoofed sender is a
+    working handle on the Jira board.
+    """
+    spoof = reply_message("abc12345", internal=False)
+    assert not fa._is_task_reply(spoof)
+    assert fa._looks_like_a_spoofed_task_reply(spoof)
+
+
+def test_a_reply_with_no_headers_at_all_is_refused():
+    # "I could not tell" must not read as yes on the one path that writes.
+    unknown = reply_message("abc12345", internal=None)
+    assert not fa._is_task_reply(unknown)
+    assert fa._looks_like_a_spoofed_task_reply(unknown)
+
+
+def test_originating_directionality_also_counts_as_internal():
+    # Exchange stamps one or the other depending on the route; both are proof.
+    msg = reply_message("abc12345", internal=None)
+    msg["internetMessageHeaders"] = [
+        {"name": "X-MS-Exchange-Organization-MessageDirectionality",
+         "value": "Originating"}]
+    assert fa._is_task_reply(msg)
+
+
+def test_mail_from_someone_else_is_not_a_spoofed_reply():
+    # A stranger with a marker is not claiming to be the owner, so it is
+    # ordinary mail for triage, not something to alert about.
+    other = reply_message("abc12345", sender="someone@elsewhere.example")
+    assert not fa._is_task_reply(other)
+    assert not fa._looks_like_a_spoofed_task_reply(other)
 
 
 def test_a_reply_from_alex_with_a_valid_marker_is_a_task_reply():

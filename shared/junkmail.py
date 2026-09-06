@@ -14,7 +14,7 @@ from __future__ import annotations
 import datetime as dt
 import html
 
-from . import persona
+from . import notice, persona
 from .availability import long_date
 from .recap import STYLE
 
@@ -108,7 +108,8 @@ def build_junk_review(
 ) -> tuple[str, str]:
     """Return (subject, html). Only ever called when there is something to show."""
     links = links or {}
-    parts = [f"<style>{STYLE}{EXTRA_STYLE}{persona.STYLE}</style>", persona.greeting_html()]
+    parts = [f"<style>{STYLE}{EXTRA_STYLE}{persona.STYLE}{notice.STYLE}</style>",
+             persona.greeting_html()]
     parts.append("<h2>Possibly not junk</h2>")
 
     parts.append(
@@ -143,6 +144,7 @@ def build_junk_review(
             + "</div>"
         )
 
+    parts.append(notice.html())
     parts.append(persona.signoff_html())
     return f"Possibly not junk ({len(candidates)}) - your junk folder empties at 5 PM", \
            "".join(parts)

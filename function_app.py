@@ -46,6 +46,7 @@ from shared.jira_client import JiraError
 from shared.jira_client import client_from_env as jira_from_env
 from shared.digests import TaskDigest, default_digest_store, find_marker
 from shared import events as ev
+from shared import mailauth, notice
 from shared.eventmail import build_event_digest
 from shared import junkreview as jr
 from shared.junkmail import build_junk_review
@@ -175,6 +176,23 @@ def run_triage(source: str) -> None:
     # Replies to a task digest are handled first and removed from the batch.
     # Left in, they would be triaged as ordinary mail - Alex emailing himself
     # "did the MOU one" reads exactly like a message owing a reply.
+    spoofed = [m for m in fresh if _looks_like_a_spoofed_task_reply(m)]
+    if spoofed:
+        # Loud, because the alternative is a silently broken feature or a
+        # silently successful attempt, and those look identical from here.
+        log.warning("%d task reply/replies rejected as not internal.", len(spoofed))
+        _alert(
+            "Assistant: a task reply was refused",
+            "<p>A message arrived carrying a task-digest tag and your own address, "
+            "but Exchange did not mark it as originating inside your tenant, so it "
+            "was <b>not</b> applied to Jira.</p><ul>"
+            + "".join(f"<li>{_esc_plain(m.get('subject') or '(no subject)')}</li>"
+                      for m in spoofed[:5])
+            + "</ul><p>If you sent it yourself, reply from Outlook rather than "
+              "another client. If you did not, someone is spoofing your address "
+              "and the refusal is the system working.</p>",
+        )
+
     task_replies = [m for m in fresh if _is_task_reply(m)]
     if task_replies:
         for message in task_replies:
@@ -293,14 +311,42 @@ def run_triage(source: str) -> None:
 def _is_task_reply(message: dict) -> bool:
     """A reply from Alex, to a digest this assistant sent.
 
-    BOTH halves are required. The marker alone would let anyone who ever
-    received a forwarded digest drive Jira by quoting its subject line; the
-    sender alone would fire on any mail Alex sends himself.
+    THREE things are required, and the third is the one that matters.
+
+    The marker alone would let anyone who ever received a forwarded digest
+    drive Jira by quoting its subject line. The sender alone would fire on any
+    mail Alex sends himself. And the two together are still not enough, because
+    a `From` address is a claim anyone can make: without the third check, a
+    forwarded digest plus a spoofed sender is a working handle on the board.
+
+    So the message must also have originated INSIDE the tenant. Exchange
+    stamps that on receipt and strips it from anything arriving from outside,
+    which makes it the one part of a message a sender cannot forge. Note that
+    DMARC is no help here at all - intra-organisation mail never leaves the
+    tenant to be evaluated and comes back `dmarc=none`, so requiring a DMARC
+    pass would reject every genuine reply Alex ever sends.
     """
     if not find_marker(message.get("subject")):
         return False
     sender = ((message.get("from") or {}).get("emailAddress") or {}).get("address", "")
-    return sender.strip().lower() == ASSISTANT_EMAIL.strip().lower()
+    if sender.strip().lower() != ASSISTANT_EMAIL.strip().lower():
+        return False
+    return mailauth.is_internal(message)
+
+
+def _looks_like_a_spoofed_task_reply(message: dict) -> bool:
+    """Carries the marker and Alex's address, but did not come from inside.
+
+    Worth telling him about rather than dropping silently: either somebody is
+    trying it, or a genuine reply took a route that stripped the headers, and
+    both are things he needs to know about the first time they happen.
+    """
+    if not find_marker(message.get("subject")):
+        return False
+    sender = ((message.get("from") or {}).get("emailAddress") or {}).get("address", "")
+    if sender.strip().lower() != ASSISTANT_EMAIL.strip().lower():
+        return False
+    return not mailauth.is_internal(message)
 
 
 def _handle_task_reply(graph, claude, message: dict) -> None:
@@ -1268,12 +1314,24 @@ def run_junk_review() -> None:
         events_store, known_events = None, set()
 
     keep: list[jr.JunkCandidate] = []
+    refused = 0
     for item in raw:
         if not jr.valid(item):
             continue
         source = by_id.get(item.get("message_id"))
         if not source:
             continue      # a message_id the model invented
+
+        # The model does not get the last word on this one. A message whose
+        # sender failed to prove who they are is exactly the message that most
+        # rewards looking legitimate, and putting a "move to inbox" button
+        # under it would have the assistant vouching for a forgery.
+        why_not = mailauth.failure(source)
+        if why_not:
+            log.info("Junk review: not surfacing %r (%s)",
+                     (source.get("subject") or "")[:60], why_not)
+            refused += 1
+            continue
 
         if item.get("kind") == "event" and item.get("title"):
             if ev.fingerprint(item["title"], item.get("start", "")) in known_events:
@@ -1293,11 +1351,13 @@ def run_junk_review() -> None:
             event_end=item.get("end") or "",
             event_location=(item.get("location") or "")[:200],
             event_online=bool(item.get("online")),
+            sender_domain=mailauth.domain(sender.get("address") or ""),
+            auth_summary=mailauth.parse(source).summary,
         )))
 
     if not keep:
-        log.info("Junk review: %s message(s) read, all of it genuinely junk.",
-                 len(fresh))
+        log.info("Junk review: %s message(s) read, all of it genuinely junk "
+                 "(%s refused on authentication).", len(fresh), refused)
         return
 
     key = actions.signing_key()
@@ -1310,7 +1370,8 @@ def run_junk_review() -> None:
 
     subject, body = build_junk_review(keep, today, links, scanned=len(messages))
     _send_mail(graph, subject, body)
-    log.info("Junk review: held back %s of %s message(s).", len(keep), len(messages))
+    log.info("Junk review: held back %s of %s message(s); %s refused on "
+             "authentication.", len(keep), len(messages), refused)
 
 
 def run_junk_purge() -> None:

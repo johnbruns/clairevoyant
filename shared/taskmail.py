@@ -15,7 +15,7 @@ from __future__ import annotations
 import datetime as dt
 import html
 
-from . import persona
+from . import notice, persona
 from .availability import long_date
 from .digests import marker_tag
 from .recap import STYLE
@@ -49,7 +49,7 @@ def _esc(text: str | None) -> str:
 
 
 def _style() -> str:
-    return f"<style>{STYLE}{EXTRA_STYLE}{persona.STYLE}</style>"
+    return f"<style>{STYLE}{EXTRA_STYLE}{persona.STYLE}{notice.STYLE}</style>"
 
 
 def _due_tag(issue, today: dt.date) -> str:
@@ -159,6 +159,8 @@ def build_task_digest(
             continue
         parts.append(f"<div class='grp'>{_esc(label)} ({len(group)})</div>")
         parts.extend(_task_line(i, for_date) for i in group)
+
+    parts.append(notice.html(notice.MARKER))
 
     overdue = len(groups["Overdue"])
     parts.append(
